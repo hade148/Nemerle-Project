@@ -1,0 +1,145 @@
+// ============================================================
+//  Group: 41
+//  Submitted by:
+//    Name: Hadasa Esther Elbaz    ID: 215178724
+//    Name: Sara David             ID: 329210199
+//
+//  Implementation language: Nemerle
+// ============================================================
+
+using System;
+using System.IO;
+using System.Console;
+
+module VMTranslator
+{
+    // -------------------------------------------------------
+    // HandleBuy - writes BUY block to the output writer
+    //             and returns the total price (amount * price)
+    // -------------------------------------------------------
+    HandleBuy(writer : StreamWriter, productName : string,
+              amount : int, price : double) : double
+    {
+        def total = (amount :> double) * price;
+        writer.WriteLine($"### BUY $productName ###");
+        writer.WriteLine($"$total");
+        total
+    }
+
+    // -------------------------------------------------------
+    // HandleSell - writes CELL block to the output writer
+    //              and returns the total price (amount * price)
+    // -------------------------------------------------------
+    HandleSell(writer : StreamWriter, productName : string,
+               amount : int, price : double) : double
+    {
+        def total = (amount :> double) * price;
+        writer.WriteLine("$$$ CELL " + productName + " $$$");
+        writer.WriteLine($"$total");
+        total
+    }
+
+    // -------------------------------------------------------
+    // ProcessVmFile - reads one .vm file and processes it
+    // -------------------------------------------------------
+    ProcessVmFile(writer : StreamWriter, filePath : string,
+                  mutable totalBuy : double, mutable totalSell : double)
+        : double * double
+    {
+        // Print the filename (without extension) as a header in the output
+        def fileNameNoExt = Path.GetFileNameWithoutExtension(filePath);
+        writer.WriteLine(fileNameNoExt);
+
+        using (def reader = StreamReader(filePath))
+        {
+            mutable line = reader.ReadLine();
+            while (line != null)
+            {
+                def trimmed = line.Trim();
+                when (trimmed.Length > 0)
+                {
+                    def parts = trimmed.Split(array[' ', '\t'],
+                                              StringSplitOptions.RemoveEmptyEntries);
+                    when (parts.Length == 4)
+                    {
+                        def cmd         = parts[0].ToLower();
+                        def productName = parts[1];
+                        def amount      = Int32.Parse(parts[2]);
+                        def price       = Double.Parse(parts[3],
+                                            System.Globalization.CultureInfo.InvariantCulture);
+
+                        match (cmd)
+                        {
+                            | "buy"  =>
+                                totalBuy += HandleBuy(writer, productName, amount, price)
+                            | "cell" =>
+                                totalSell += HandleSell(writer, productName, amount, price)
+                            | _ => ()   // ignore unrecognised commands
+                        }
+                    }
+                }
+                line = reader.ReadLine();
+            }
+        }
+        (totalBuy, totalSell)
+    }
+
+    // -------------------------------------------------------
+    // Main entry point
+    // -------------------------------------------------------
+    Main() : void
+    {
+        // --- 1. Get directory path from the user ---
+        Write("Enter directory path: ");
+        def dirPath = ReadLine().Trim().Trim('"');
+
+        unless (Directory.Exists(dirPath))
+        {
+            WriteLine($"Error: directory '$dirPath' does not exist.");
+            _ = ReadLine();
+            Environment.Exit(1);
+        }
+
+        // --- 2. Determine output file name (same as last folder name) ---
+        def dirName    = Path.GetFileName(dirPath.TrimEnd(
+                            array[Path.DirectorySeparatorChar,
+                                  Path.AltDirectorySeparatorChar]));
+        def outputPath = Path.Combine(dirPath, dirName + ".asm");
+
+        // --- 3. Find all .vm files in the directory ---
+        def vmFiles = Directory.GetFiles(dirPath, "*.vm");
+
+        when (vmFiles.Length == 0)
+        {
+            WriteLine("No .vm files found in the specified directory.");
+            _ = ReadLine();
+            Environment.Exit(1);
+        }
+
+        // --- 4. Open output file and process every .vm file ---
+        mutable totalBuy  = 0.0;
+        mutable totalSell = 0.0;
+
+        using (def writer = StreamWriter(outputPath, false))
+        {
+            foreach (vmFile in vmFiles)
+            {
+                (totalBuy, totalSell) =
+                    ProcessVmFile(writer, vmFile, totalBuy, totalSell);
+            }
+
+            // --- 5. Write and print totals ---
+            def buyLine  = $"TOTAL BUY: $totalBuy";
+            def sellLine = $"TOTAL CELL: $totalSell";
+
+            writer.WriteLine(buyLine);
+            writer.WriteLine(sellLine);
+
+            WriteLine(buyLine);
+            WriteLine(sellLine);
+        }
+
+        WriteLine($"\nOutput written to: $outputPath");
+        _ = ReadLine();
+    }
+}

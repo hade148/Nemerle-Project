@@ -1,0 +1,22 @@
+# ── Compiled binaries ──────────────────────────────────────────
+*.exe
+*.dll
+*.pdb
+
+# ── Generated output files ─────────────────────────────────────
+# .asm files are OUTPUT of our compiler – not source files
+*.asm
+
+# ── Windows artifacts ──────────────────────────────────────────
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ── OS X ───────────────────────────────────────────────────────
+.DS_Store
+
+# ── Editor / IDE ───────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.user
