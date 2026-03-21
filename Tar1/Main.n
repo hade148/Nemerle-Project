@@ -1,0 +1,207 @@
+// ============================================================
+//  Group: 41
+//  Submitted by:
+//    Name: Hadasa Esther Elbaz    ID: 215178724
+//    Name: Sara David             ID: 329210199
+//
+//  Implementation language: Nemerle
+// ============================================================
+
+using System;
+using System.IO;
+using System.Console;
+
+module VMTranslator
+{
+    mutable labelCounter : int = 0;
+
+    GetNewLabel() : string
+    {
+        def label = $"LBL_$labelCounter";
+        labelCounter++;
+        label
+    }
+
+    // Helper: write multiple assembly lines from an array
+    WriteLines(writer : StreamWriter, lines : array[string]) : void
+    {
+        foreach (line in lines)
+            writer.WriteLine(line);
+    }
+
+    WriteArithmetic(writer : StreamWriter, command : string) : void
+    {
+        writer.WriteLine($"// $command");
+        match (command)
+        {
+            | "add" =>
+                WriteLines(writer, array["@SP", "AM=M-1", "D=M", "A=A-1", "M=M+D"]);
+            | "sub" =>
+                WriteLines(writer, array["@SP", "AM=M-1", "D=M", "A=A-1", "M=M-D"]);
+            | "neg" =>
+                WriteLines(writer, array["@SP", "A=M-1", "M=-M"]);
+            | "and" =>
+                WriteLines(writer, array["@SP", "AM=M-1", "D=M", "A=A-1", "M=M&D"]);
+            | "or" =>
+                WriteLines(writer, array["@SP", "AM=M-1", "D=M", "A=A-1", "M=M|D"]);
+            | "not" =>
+                WriteLines(writer, array["@SP", "A=M-1", "M=!M"]);
+            | "eq" | "gt" | "lt" =>
+                def jumpCmd = match (command) {
+                    | "eq" => "JEQ"
+                    | "gt" => "JGT"
+                    | "lt" => "JLT"
+                    | _ => ""
+                };
+                def lblTrue = GetNewLabel() + "_TRUE";
+                def lblEnd  = GetNewLabel() + "_END";
+                
+                WriteLines(writer, array[
+                    "@SP", "AM=M-1", "D=M", "A=A-1", "D=M-D",
+                    $"@$lblTrue", $"D;$jumpCmd",
+                    "@SP", "A=M-1", "M=0",
+                    $"@$lblEnd", "0;JMP",
+                    $"($lblTrue)",
+                    "@SP", "A=M-1", "M=-1",
+                    $"($lblEnd)"
+                ]);
+            | _ => ()
+        }
+    }
+
+    WritePushPop(writer : StreamWriter, command : string, segment : string, index : int, fileName : string) : void
+    {
+        writer.WriteLine($"// $command $segment $index");
+
+        if (command == "push")
+        {
+            match (segment)
+            {
+                | "constant" =>
+                    WriteLines(writer, array[$"@$index", "D=A", "@SP", "A=M", "M=D", "@SP", "M=M+1"]);
+                | "local" | "argument" | "this" | "that" =>
+                    def segPtr = match (segment) {
+                        | "local" => "LCL"
+                        | "argument" => "ARG"
+                        | "this" => "THIS"
+                        | "that" => "THAT"
+                        | _ => ""
+                    };
+                    WriteLines(writer, array[$"@$index", "D=A", $"@$segPtr", "A=M+D", "D=M", "@SP", "A=M", "M=D", "@SP", "M=M+1"]);
+                | "temp" =>
+                    WriteLines(writer, array[$"@$index", "D=A", "@5", "A=A+D", "D=M", "@SP", "A=M", "M=D", "@SP", "M=M+1"]);
+                | "pointer" =>
+                    def ptr = if (index == 0) "3" else "4";
+                    WriteLines(writer, array[$"@$ptr", "D=M", "@SP", "A=M", "M=D", "@SP", "M=M+1"]);
+                | "static" =>
+                    WriteLines(writer, array[$"@$fileName.$index", "D=M", "@SP", "A=M", "M=D", "@SP", "M=M+1"]);
+                | _ => ()
+            }
+        }
+        else if (command == "pop")
+        {
+            match (segment)
+            {
+                | "local" | "argument" | "this" | "that" =>
+                    def segPtr = match (segment) {
+                        | "local" => "LCL"
+                        | "argument" => "ARG"
+                        | "this" => "THIS"
+                        | "that" => "THAT"
+                        | _ => ""
+                    };
+                    WriteLines(writer, array[$"@$index", "D=A", $"@$segPtr", "D=M+D", "@R13", "M=D", "@SP", "AM=M-1", "D=M", "@R13", "A=M", "M=D"]);
+                | "temp" =>
+                    WriteLines(writer, array[$"@$index", "D=A", "@5", "D=A+D", "@R13", "M=D", "@SP", "AM=M-1", "D=M", "@R13", "A=M", "M=D"]);
+                | "pointer" =>
+                    def ptr = if (index == 0) "3" else "4";
+                    WriteLines(writer, array["@SP", "AM=M-1", "D=M", $"@$ptr", "M=D"]);
+                | "static" =>
+                    WriteLines(writer, array["@SP", "AM=M-1", "D=M", $"@$fileName.$index", "M=D"]);
+                | _ => ()
+            }
+        }
+        else ()
+    }
+
+    ProcessFile(writer : StreamWriter, filePath : string) : void
+    {
+        def fileName = Path.GetFileNameWithoutExtension(filePath);
+        using (def reader = StreamReader(filePath))
+        {
+            mutable line = reader.ReadLine();
+            while (line != null)
+            {
+                def commentIdx = line.IndexOf("//");
+                def cleanLine = if (commentIdx >= 0) line.Substring(0, commentIdx) else line;
+                def trimmed = cleanLine.Trim();
+                
+                when (trimmed.Length > 0)
+                {
+                    def parts = trimmed.Split(array[' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+                    def cmd = parts[0];
+                    if (parts.Length == 1)
+                    {
+                        WriteArithmetic(writer, cmd);
+                    }
+                    else if (parts.Length == 3)
+                    {
+                        def segment = parts[1];
+                        def index = Int32.Parse(parts[2]);
+                        WritePushPop(writer, cmd, segment, index, fileName);
+                    }
+                    else ()
+                }
+                line = reader.ReadLine();
+            }
+        }
+    }
+
+    Main() : void
+    {
+        Write("Enter path to .vm file or directory: ");
+        def targetPath = ReadLine().Trim().Trim('"');
+
+        if (Directory.Exists(targetPath))
+        {
+            def dirName = Path.GetFileName(targetPath.TrimEnd(array[Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]));
+            def outputPath = Path.Combine(targetPath, dirName + ".asm");
+            def vmFiles = Directory.GetFiles(targetPath, "*.vm");
+
+            if (vmFiles.Length == 0)
+            {
+                WriteLine("No .vm files found in the specified directory.");
+            }
+            else
+            {
+                using (def writer = StreamWriter(outputPath, false))
+                {
+                    foreach (vmFile in vmFiles)
+                    {
+                        ProcessFile(writer, vmFile);
+                    }
+                }
+                WriteLine($"Output written to: $outputPath");
+            }
+        }
+        else if (File.Exists(targetPath) && targetPath.EndsWith(".vm", StringComparison.OrdinalIgnoreCase))
+        {
+            def dirPath = Path.GetDirectoryName(targetPath);
+            def fileNameNoExt = Path.GetFileNameWithoutExtension(targetPath);
+            def outputPath = Path.Combine(dirPath, fileNameNoExt + ".asm");
+
+            using (def writer = StreamWriter(outputPath, false))
+            {
+                ProcessFile(writer, targetPath);
+            }
+            WriteLine($"Output written to: $outputPath");
+        }
+        else
+        {
+            WriteLine($"Error: path '$targetPath' does not exist or is not a .vm file.");
+        }
+
+        WriteLine("Press Enter to exit...");
+        _ = ReadLine();
+    }
+}
