@@ -1,11 +1,11 @@
 # ── Compiled binaries ──────────────────────────────────────────
-*.exe
+#*.exe
 *.dll
 *.pdb
 
 # ── Generated output files ─────────────────────────────────────
 # .asm files are OUTPUT of our compiler – not source files
-*.asm
+#*.asm
 
 # ── Windows artifacts ──────────────────────────────────────────
 Thumbs.db
