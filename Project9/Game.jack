@@ -1,0 +1,268 @@
+// Game.jack
+// Main game controller for the NEMERLE Objects Interactive Program.
+// N (first letter) = Notebook | E (last letter) = Eyes
+//
+// Controls:
+//   Arrows        = Move object
+//   A             = Grow
+//   S             = Shrink
+//   O             = Open / Close  (Notebook only)
+//   B             = Blink         (Eyes only)
+//   Q             = Quit + Summary
+
+class Game {
+    field Notebook notebook;
+    field Eyes     eyes;
+    field int      actionCount;
+    field int      selected;    // 1 = Notebook, 2 = Eyes
+
+    constructor Game new() {
+        let notebook = Notebook.new(60, 70);
+        let eyes     = Eyes.new(330, 110);
+        let actionCount = 0;
+        let selected    = 0;
+        return this;
+    }
+
+    method void dispose() {
+        do notebook.dispose();
+        do eyes.dispose();
+        do Memory.deAlloc(this);
+        return;
+    }
+
+    // -------------------------------------------------------
+    // Entry point
+    // -------------------------------------------------------
+    method void run() {
+        do showSelection();
+        do waitForSelection();
+        do Screen.clearScreen();
+
+        if (selected = 1) {
+            do notebook.setPosition(196, 78);
+            do notebook.draw();
+            do runNotebookLoop();
+        } else {
+            do eyes.setPosition(200, 128);
+            do eyes.draw();
+            do runEyesLoop();
+        }
+
+        do showSummary();
+        return;
+    }
+
+    // -------------------------------------------------------
+    // Selection screen
+    // -------------------------------------------------------
+    method void showSelection() {
+        do Screen.clearScreen();
+
+        do Output.moveCursor(0, 12);
+        do Output.printString("=== NEMERLE Objects ===  Choose your object");
+
+        do Output.moveCursor(2, 4);
+        do Output.printString("1. NOTEBOOK (N)");
+        do Output.moveCursor(2, 40);
+        do Output.printString("2. EYES (E)");
+
+        do Output.moveCursor(22, 8);
+        do Output.printString("Press  1  for NOTEBOOK        Press  2  for EYES");
+
+        do notebook.draw();
+        do eyes.draw();
+        return;
+    }
+
+    method void waitForSelection() {
+        var char key;
+        var boolean done;
+        let done = false;
+
+        while (~done) {
+            let key = Keyboard.keyPressed();
+            if (key = 49) {    // '1'
+                let selected = 1;
+                let done = true;
+            }
+            if (key = 50) {    // '2'
+                let selected = 2;
+                let done = true;
+            }
+            do Sys.wait(40);
+        }
+        while (~(Keyboard.keyPressed() = 0)) {
+            do Sys.wait(10);
+        }
+        return;
+    }
+
+    // -------------------------------------------------------
+    // HUD
+    // -------------------------------------------------------
+    method void printHUDNotebook() {
+        do Output.moveCursor(0, 0);
+        do Output.printString("Object: NOTEBOOK  |  Actions: ");
+        do Output.printInt(actionCount);
+        do Output.printString("   ");
+        do Output.moveCursor(1, 0);
+        do Output.printString("Arrows:Move  A:Grow  S:Shrink  O:Open/Close  Q:Quit");
+        return;
+    }
+
+    method void printHUDEyes() {
+        do Output.moveCursor(0, 0);
+        do Output.printString("Object: EYES      |  Actions: ");
+        do Output.printInt(actionCount);
+        do Output.printString("   ");
+        do Output.moveCursor(1, 0);
+        do Output.printString("Arrows:Move  A:Grow  S:Shrink  B:Blink       Q:Quit");
+        return;
+    }
+
+    // -------------------------------------------------------
+    // NOTEBOOK game loop
+    // -------------------------------------------------------
+    method void runNotebookLoop() {
+        var char key;
+        var char prev;
+        var boolean exit;
+        let exit = false;
+        let prev  = 0;
+
+        do printHUDNotebook();
+
+        while (~exit) {
+            let key = Keyboard.keyPressed();
+
+            if (~(key = prev)) {
+                if (key = 130) {             // Left arrow
+                    do notebook.moveLeft();
+                    let actionCount = actionCount + 1;
+                }
+                if (key = 132) {             // Right arrow
+                    do notebook.moveRight();
+                    let actionCount = actionCount + 1;
+                }
+                if (key = 131) {             // Up arrow
+                    do notebook.moveUp();
+                    let actionCount = actionCount + 1;
+                }
+                if (key = 133) {             // Down arrow
+                    do notebook.moveDown();
+                    let actionCount = actionCount + 1;
+                }
+                if (key = 65) {              // A — grow
+                    do notebook.grow();
+                    let actionCount = actionCount + 1;
+                }
+                if (key = 83) {              // S — shrink
+                    do notebook.shrink();
+                    let actionCount = actionCount + 1;
+                }
+                if (key = 79) {              // O — open / close
+                    do notebook.toggleOpen();
+                    let actionCount = actionCount + 1;
+                }
+                if (key = 81) {              // Q — quit
+                    let exit = true;
+                }
+                let prev = key;
+                do printHUDNotebook();
+            }
+
+            do Sys.wait(60);
+        }
+        return;
+    }
+
+    // -------------------------------------------------------
+    // EYES game loop
+    // -------------------------------------------------------
+    method void runEyesLoop() {
+        var char key;
+        var char prev;
+        var boolean exit;
+        let exit = false;
+        let prev  = 0;
+
+        do printHUDEyes();
+
+        while (~exit) {
+            let key = Keyboard.keyPressed();
+
+            if (~(key = prev)) {
+                if (key = 130) {             // Left arrow
+                    do eyes.moveLeft();
+                    let actionCount = actionCount + 1;
+                }
+                if (key = 132) {             // Right arrow
+                    do eyes.moveRight();
+                    let actionCount = actionCount + 1;
+                }
+                if (key = 131) {             // Up arrow
+                    do eyes.moveUp();
+                    let actionCount = actionCount + 1;
+                }
+                if (key = 133) {             // Down arrow
+                    do eyes.moveDown();
+                    let actionCount = actionCount + 1;
+                }
+                if (key = 65) {              // A — grow
+                    do eyes.grow();
+                    let actionCount = actionCount + 1;
+                }
+                if (key = 83) {              // S — shrink
+                    do eyes.shrink();
+                    let actionCount = actionCount + 1;
+                }
+                if (key = 66) {              // B — blink
+                    do eyes.blink();
+                    let actionCount = actionCount + 1;
+                }
+                if (key = 81) {              // Q — quit
+                    let exit = true;
+                }
+                let prev = key;
+                do printHUDEyes();
+            }
+
+            do Sys.wait(60);
+        }
+        return;
+    }
+
+    // -------------------------------------------------------
+    // Summary screen
+    // -------------------------------------------------------
+    method void showSummary() {
+        do Screen.clearScreen();
+
+        do Output.moveCursor(4, 20);
+        do Output.printString("===========================");
+        do Output.moveCursor(5, 20);
+        do Output.printString("       GAME OVER           ");
+        do Output.moveCursor(6, 20);
+        do Output.printString("===========================");
+
+        do Output.moveCursor(9, 18);
+        do Output.printString("Selected object : ");
+        if (selected = 1) {
+            do Output.printString("NOTEBOOK  (N)");
+        } else {
+            do Output.printString("EYES  (E)");
+        }
+
+        do Output.moveCursor(11, 18);
+        do Output.printString("Total actions   : ");
+        do Output.printInt(actionCount);
+
+        do Output.moveCursor(14, 16);
+        do Output.printString("NEMERLE: N = Notebook, E = Eyes");
+
+        do Output.moveCursor(16, 20);
+        do Output.printString("Thanks for playing!");
+        return;
+    }
+}

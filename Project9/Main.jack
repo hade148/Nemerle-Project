@@ -1,0 +1,13 @@
+// Main.jack
+// Entry point for the NEMERLE Objects Interactive Program.
+// N = Notebook (first letter), E = Eyes (last letter).
+
+class Main {
+    function void main() {
+        var Game game;
+        let game = Game.new();
+        do game.run();
+        do game.dispose();
+        return;
+    }
+}

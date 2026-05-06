@@ -1,0 +1,228 @@
+// Notebook.jack
+// Represents a Notebook shape (letter N in NEMERLE).
+// Supports: Move (4 dirs), Grow, Shrink, Open/Close toggle.
+// Key O = open or close the notebook (animated toggle).
+
+class Notebook {
+    field int x;          // top-left x position
+    field int y;          // top-left y position
+    field int h;          // height (shared for both states)
+    field int step;       // movement step in pixels
+    field boolean isOpen; // true = notebook is open
+    field int closedW;    // width when closed
+    field int openW;      // width when open
+
+    constructor Notebook new(int ax, int ay) {
+        let x = ax;
+        let y = ay;
+        let h = 100;
+        let step = 8;
+        let isOpen = false;
+        let closedW = 36;
+        let openW = 152;
+        return this;
+    }
+
+    method void dispose() {
+        do Memory.deAlloc(this);
+        return;
+    }
+
+    method void setPosition(int ax, int ay) {
+        let x = ax;
+        let y = ay;
+        return;
+    }
+
+    method int getX() { return x; }
+    method int getY() { return y; }
+
+    /** Returns current width depending on open/closed state. */
+    method int getW() {
+        if (isOpen) { return openW; }
+        return closedW;
+    }
+
+    // -------------------------------------------------------
+    // ERASE: always erase max possible footprint (open width)
+    // -------------------------------------------------------
+    method void erase() {
+        do Screen.setColor(false);
+        do Screen.drawRectangle(x - 1, y - 2, x + openW + 2, y + h + 2);
+        return;
+    }
+
+    // -------------------------------------------------------
+    // DRAW
+    // -------------------------------------------------------
+    method void draw() {
+        if (isOpen) {
+            do drawOpen();
+        } else {
+            do drawClosed();
+        }
+        return;
+    }
+
+    /** Closed notebook: thin cover with spiral binding. */
+    method void drawClosed() {
+        var int dy;
+        var int bw;
+        let bw = 13;
+
+        do Screen.setColor(true);
+        // Outer border
+        do Screen.drawLine(x, y, x + closedW, y);
+        do Screen.drawLine(x + closedW, y, x + closedW, y + h);
+        do Screen.drawLine(x, y + h, x + closedW, y + h);
+        do Screen.drawLine(x, y, x, y + h);
+        // Binding strip (filled black)
+        do Screen.drawRectangle(x, y, x + bw, y + h);
+        // Spiral hole dots (white circles on binding)
+        do Screen.setColor(false);
+        let dy = y + 10;
+        while (dy < (y + h - 5)) {
+            do Screen.drawCircle(x + 6, dy, 3);
+            let dy = dy + 15;
+        }
+        return;
+    }
+
+    /** Open notebook: two pages with ruled lines and center spine. */
+    method void drawOpen() {
+        var int midX;
+        var int lineY;
+        let midX = x + (openW / 2);
+
+        do Screen.setColor(true);
+        // Outer border
+        do Screen.drawLine(x, y, x + openW, y);
+        do Screen.drawLine(x + openW, y, x + openW, y + h);
+        do Screen.drawLine(x, y + h, x + openW, y + h);
+        do Screen.drawLine(x, y, x, y + h);
+
+        // Center spine (3 close lines = thick spine)
+        do Screen.drawLine(midX - 1, y, midX - 1, y + h);
+        do Screen.drawLine(midX,     y, midX,     y + h);
+        do Screen.drawLine(midX + 1, y, midX + 1, y + h);
+
+        // Ruled lines on LEFT page
+        let lineY = y + 14;
+        while (lineY < (y + h - 5)) {
+            do Screen.drawLine(x + 5, lineY, midX - 5, lineY);
+            let lineY = lineY + 10;
+        }
+
+        // Ruled lines on RIGHT page
+        let lineY = y + 14;
+        while (lineY < (y + h - 5)) {
+            do Screen.drawLine(midX + 5, lineY, x + openW - 5, lineY);
+            let lineY = lineY + 10;
+        }
+
+        // Small page number dots at bottom
+        do Screen.drawCircle(x + (openW / 4),         y + h - 6, 2);
+        do Screen.drawCircle(x + openW - (openW / 4), y + h - 6, 2);
+        return;
+    }
+
+    // -------------------------------------------------------
+    // OPEN / CLOSE TOGGLE
+    // Animates a "flipping" feel: partial open -> full open
+    // -------------------------------------------------------
+    method void toggleOpen() {
+        var int midW;
+        let midW = (closedW + openW) / 2;
+
+        do erase();
+
+        if (isOpen) {
+            // Animate closing: show intermediate half-open state
+            do Screen.setColor(true);
+            do Screen.drawLine(x, y, x + midW, y);
+            do Screen.drawLine(x + midW, y, x + midW, y + h);
+            do Screen.drawLine(x, y + h, x + midW, y + h);
+            do Screen.drawLine(x, y, x, y + h);
+            do Sys.wait(80);
+            do erase();
+            let isOpen = false;
+            do draw();
+        } else {
+            // Animate opening: show intermediate half-open state
+            do Screen.setColor(true);
+            do Screen.drawLine(x, y, x + midW, y);
+            do Screen.drawLine(x + midW, y, x + midW, y + h);
+            do Screen.drawLine(x, y + h, x + midW, y + h);
+            do Screen.drawLine(x, y, x, y + h);
+            do Sys.wait(80);
+            do erase();
+            let isOpen = true;
+            do draw();
+        }
+        return;
+    }
+
+    // -------------------------------------------------------
+    // MOVEMENT (boundary checks use current width)
+    // -------------------------------------------------------
+    method void moveLeft() {
+        if (x > step) {
+            do erase();
+            let x = x - step;
+            do draw();
+        }
+        return;
+    }
+
+    method void moveRight() {
+        if ((x + getW() + step) < 511) {
+            do erase();
+            let x = x + step;
+            do draw();
+        }
+        return;
+    }
+
+    method void moveUp() {
+        if (y > step) {
+            do erase();
+            let y = y - step;
+            do draw();
+        }
+        return;
+    }
+
+    method void moveDown() {
+        if ((y + h + step) < 255) {
+            do erase();
+            let y = y + step;
+            do draw();
+        }
+        return;
+    }
+
+    // -------------------------------------------------------
+    // SIZE
+    // -------------------------------------------------------
+    method void grow() {
+        if ((openW < 200) & (h < 170)) {
+            do erase();
+            let closedW = closedW + 4;
+            let openW   = openW   + 16;
+            let h       = h       + 12;
+            do draw();
+        }
+        return;
+    }
+
+    method void shrink() {
+        if ((closedW > 20) & (h > 50)) {
+            do erase();
+            let closedW = closedW - 4;
+            let openW   = openW   - 16;
+            let h       = h       - 12;
+            do draw();
+        }
+        return;
+    }
+}

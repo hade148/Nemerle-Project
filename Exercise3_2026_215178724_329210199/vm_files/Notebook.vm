@@ -1,0 +1,370 @@
+function Notebook.new 0
+push constant 5
+call Memory.alloc 1
+pop pointer 0
+push argument 0
+pop this 0
+push argument 1
+pop this 1
+push constant 80
+pop this 2
+push constant 100
+pop this 3
+push constant 8
+pop this 4
+push pointer 0
+return
+function Notebook.dispose 0
+push argument 0
+pop pointer 0
+push pointer 0
+call Memory.deAlloc 1
+pop temp 0
+push constant 0
+return
+function Notebook.setPosition 0
+push argument 0
+pop pointer 0
+push argument 1
+pop this 0
+push argument 2
+pop this 1
+push constant 0
+return
+function Notebook.getX 0
+push argument 0
+pop pointer 0
+push this 0
+return
+function Notebook.getY 0
+push argument 0
+pop pointer 0
+push this 1
+return
+function Notebook.drawColor 2
+push argument 0
+pop pointer 0
+push constant 14
+pop local 1
+push argument 1
+call Screen.setColor 1
+pop temp 0
+push this 0
+push this 1
+push this 0
+push local 1
+add
+push this 1
+push this 3
+add
+call Screen.drawRectangle 4
+pop temp 0
+push this 0
+push this 1
+push this 0
+push this 2
+add
+push this 1
+call Screen.drawLine 4
+pop temp 0
+push this 0
+push this 2
+add
+push this 1
+push this 0
+push this 2
+add
+push this 1
+push this 3
+add
+call Screen.drawLine 4
+pop temp 0
+push this 0
+push this 1
+push this 3
+add
+push this 0
+push this 2
+add
+push this 1
+push this 3
+add
+call Screen.drawLine 4
+pop temp 0
+push this 0
+push this 1
+push this 0
+push this 1
+push this 3
+add
+call Screen.drawLine 4
+pop temp 0
+push this 1
+push constant 14
+add
+pop local 0
+label WHILE_EXP0
+push local 0
+push this 1
+push this 3
+add
+push constant 5
+sub
+lt
+not
+if-goto WHILE_END0
+push this 0
+push local 1
+add
+push constant 4
+add
+push local 0
+push this 0
+push this 2
+add
+push constant 4
+sub
+push local 0
+call Screen.drawLine 4
+pop temp 0
+push local 0
+push constant 10
+add
+pop local 0
+goto WHILE_EXP0
+label WHILE_END0
+push argument 1
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push constant 0
+call Screen.setColor 1
+pop temp 0
+goto IF_END0
+label IF_FALSE0
+push constant 0
+not
+call Screen.setColor 1
+pop temp 0
+label IF_END0
+push this 1
+push constant 10
+add
+pop local 0
+label WHILE_EXP1
+push local 0
+push this 1
+push this 3
+add
+push constant 5
+sub
+lt
+not
+if-goto WHILE_END1
+push this 0
+push constant 7
+add
+push local 0
+push constant 3
+call Screen.drawCircle 3
+pop temp 0
+push local 0
+push constant 15
+add
+pop local 0
+goto WHILE_EXP1
+label WHILE_END1
+push constant 0
+return
+function Notebook.draw 0
+push argument 0
+pop pointer 0
+push pointer 0
+push constant 0
+not
+call Notebook.drawColor 2
+pop temp 0
+push constant 0
+return
+function Notebook.erase 0
+push argument 0
+pop pointer 0
+push constant 0
+call Screen.setColor 1
+pop temp 0
+push this 0
+push constant 1
+sub
+push this 1
+push constant 1
+sub
+push this 0
+push this 2
+add
+push constant 1
+add
+push this 1
+push this 3
+add
+push constant 1
+add
+call Screen.drawRectangle 4
+pop temp 0
+push constant 0
+return
+function Notebook.moveLeft 0
+push argument 0
+pop pointer 0
+push this 0
+push this 4
+gt
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push pointer 0
+call Notebook.erase 1
+pop temp 0
+push this 0
+push this 4
+sub
+pop this 0
+push pointer 0
+call Notebook.draw 1
+pop temp 0
+label IF_FALSE0
+push constant 0
+return
+function Notebook.moveRight 0
+push argument 0
+pop pointer 0
+push this 0
+push this 2
+add
+push this 4
+add
+push constant 511
+lt
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push pointer 0
+call Notebook.erase 1
+pop temp 0
+push this 0
+push this 4
+add
+pop this 0
+push pointer 0
+call Notebook.draw 1
+pop temp 0
+label IF_FALSE0
+push constant 0
+return
+function Notebook.moveUp 0
+push argument 0
+pop pointer 0
+push this 1
+push this 4
+gt
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push pointer 0
+call Notebook.erase 1
+pop temp 0
+push this 1
+push this 4
+sub
+pop this 1
+push pointer 0
+call Notebook.draw 1
+pop temp 0
+label IF_FALSE0
+push constant 0
+return
+function Notebook.moveDown 0
+push argument 0
+pop pointer 0
+push this 1
+push this 3
+add
+push this 4
+add
+push constant 255
+lt
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push pointer 0
+call Notebook.erase 1
+pop temp 0
+push this 1
+push this 4
+add
+pop this 1
+push pointer 0
+call Notebook.draw 1
+pop temp 0
+label IF_FALSE0
+push constant 0
+return
+function Notebook.grow 0
+push argument 0
+pop pointer 0
+push this 2
+push constant 140
+lt
+push this 3
+push constant 170
+lt
+and
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push pointer 0
+call Notebook.erase 1
+pop temp 0
+push this 2
+push constant 10
+add
+pop this 2
+push this 3
+push constant 12
+add
+pop this 3
+push pointer 0
+call Notebook.draw 1
+pop temp 0
+label IF_FALSE0
+push constant 0
+return
+function Notebook.shrink 0
+push argument 0
+pop pointer 0
+push this 2
+push constant 40
+gt
+push this 3
+push constant 50
+gt
+and
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push pointer 0
+call Notebook.erase 1
+pop temp 0
+push this 2
+push constant 10
+sub
+pop this 2
+push this 3
+push constant 12
+sub
+pop this 3
+push pointer 0
+call Notebook.draw 1
+pop temp 0
+label IF_FALSE0
+push constant 0
+return

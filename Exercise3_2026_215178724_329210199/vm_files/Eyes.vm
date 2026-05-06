@@ -1,0 +1,362 @@
+function Eyes.new 0
+push constant 4
+call Memory.alloc 1
+pop pointer 0
+push argument 0
+pop this 0
+push argument 1
+pop this 1
+push constant 22
+pop this 2
+push constant 8
+pop this 3
+push pointer 0
+return
+function Eyes.dispose 0
+push argument 0
+pop pointer 0
+push pointer 0
+call Memory.deAlloc 1
+pop temp 0
+push constant 0
+return
+function Eyes.setPosition 0
+push argument 0
+pop pointer 0
+push argument 1
+pop this 0
+push argument 2
+pop this 1
+push constant 0
+return
+function Eyes.getX 0
+push argument 0
+pop pointer 0
+push this 0
+return
+function Eyes.getY 0
+push argument 0
+pop pointer 0
+push this 1
+return
+function Eyes.drawColor 2
+push argument 0
+pop pointer 0
+push this 2
+push this 2
+add
+push constant 10
+add
+pop local 0
+push this 2
+push constant 3
+call Math.divide 2
+pop local 1
+push argument 1
+call Screen.setColor 1
+pop temp 0
+push this 0
+push this 1
+push this 2
+call Screen.drawCircle 3
+pop temp 0
+push this 0
+push local 0
+add
+push this 1
+push this 2
+call Screen.drawCircle 3
+pop temp 0
+push argument 1
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push constant 0
+call Screen.setColor 1
+pop temp 0
+goto IF_END0
+label IF_FALSE0
+push constant 0
+not
+call Screen.setColor 1
+pop temp 0
+label IF_END0
+push this 0
+push constant 4
+add
+push this 1
+push constant 4
+add
+push local 1
+call Screen.drawCircle 3
+pop temp 0
+push this 0
+push local 0
+add
+push constant 4
+add
+push this 1
+push constant 4
+add
+push local 1
+call Screen.drawCircle 3
+pop temp 0
+push argument 1
+call Screen.setColor 1
+pop temp 0
+push this 0
+push this 2
+sub
+push constant 2
+add
+push this 1
+push this 2
+sub
+push constant 4
+sub
+push this 0
+push this 2
+add
+push constant 2
+sub
+push this 1
+push this 2
+sub
+push constant 8
+sub
+call Screen.drawLine 4
+pop temp 0
+push this 0
+push local 0
+add
+push this 2
+sub
+push constant 2
+add
+push this 1
+push this 2
+sub
+push constant 8
+sub
+push this 0
+push local 0
+add
+push this 2
+add
+push constant 2
+sub
+push this 1
+push this 2
+sub
+push constant 4
+sub
+call Screen.drawLine 4
+pop temp 0
+push constant 0
+return
+function Eyes.draw 0
+push argument 0
+pop pointer 0
+push pointer 0
+push constant 0
+not
+call Eyes.drawColor 2
+pop temp 0
+push constant 0
+return
+function Eyes.erase 1
+push argument 0
+pop pointer 0
+push this 2
+push this 2
+add
+push constant 10
+add
+pop local 0
+push constant 0
+call Screen.setColor 1
+pop temp 0
+push this 0
+push this 2
+sub
+push constant 2
+sub
+push this 1
+push this 2
+sub
+push constant 12
+sub
+push this 0
+push local 0
+add
+push this 2
+add
+push constant 2
+add
+push this 1
+push this 2
+add
+push constant 2
+add
+call Screen.drawRectangle 4
+pop temp 0
+push constant 0
+return
+function Eyes.moveLeft 0
+push argument 0
+pop pointer 0
+push this 0
+push this 2
+sub
+push this 3
+sub
+push constant 0
+gt
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push pointer 0
+call Eyes.erase 1
+pop temp 0
+push this 0
+push this 3
+sub
+pop this 0
+push pointer 0
+call Eyes.draw 1
+pop temp 0
+label IF_FALSE0
+push constant 0
+return
+function Eyes.moveRight 1
+push argument 0
+pop pointer 0
+push this 2
+push this 2
+add
+push constant 10
+add
+pop local 0
+push this 0
+push local 0
+add
+push this 2
+add
+push this 3
+add
+push constant 511
+lt
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push pointer 0
+call Eyes.erase 1
+pop temp 0
+push this 0
+push this 3
+add
+pop this 0
+push pointer 0
+call Eyes.draw 1
+pop temp 0
+label IF_FALSE0
+push constant 0
+return
+function Eyes.moveUp 0
+push argument 0
+pop pointer 0
+push this 1
+push this 2
+sub
+push constant 12
+sub
+push this 3
+sub
+push constant 0
+gt
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push pointer 0
+call Eyes.erase 1
+pop temp 0
+push this 1
+push this 3
+sub
+pop this 1
+push pointer 0
+call Eyes.draw 1
+pop temp 0
+label IF_FALSE0
+push constant 0
+return
+function Eyes.moveDown 0
+push argument 0
+pop pointer 0
+push this 1
+push this 2
+add
+push this 3
+add
+push constant 255
+lt
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push pointer 0
+call Eyes.erase 1
+pop temp 0
+push this 1
+push this 3
+add
+pop this 1
+push pointer 0
+call Eyes.draw 1
+pop temp 0
+label IF_FALSE0
+push constant 0
+return
+function Eyes.grow 0
+push argument 0
+pop pointer 0
+push this 2
+push constant 35
+lt
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push pointer 0
+call Eyes.erase 1
+pop temp 0
+push this 2
+push constant 4
+add
+pop this 2
+push pointer 0
+call Eyes.draw 1
+pop temp 0
+label IF_FALSE0
+push constant 0
+return
+function Eyes.shrink 0
+push argument 0
+pop pointer 0
+push this 2
+push constant 10
+gt
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push pointer 0
+call Eyes.erase 1
+pop temp 0
+push this 2
+push constant 4
+sub
+pop this 2
+push pointer 0
+call Eyes.draw 1
+pop temp 0
+label IF_FALSE0
+push constant 0
+return
