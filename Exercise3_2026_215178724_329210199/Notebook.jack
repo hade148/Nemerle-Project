@@ -1,0 +1,140 @@
+// Notebook.jack
+// Represents a Notebook shape (letter N in NEMERLE).
+// Supports drawing, erasing, moving (4 directions), grow, and shrink.
+
+class Notebook {
+    field int x;       // top-left x
+    field int y;       // top-left y
+    field int w;       // width
+    field int h;       // height
+    field int step;    // movement step in pixels
+
+    constructor Notebook new(int ax, int ay) {
+        let x = ax;
+        let y = ay;
+        let w = 80;
+        let h = 100;
+        let step = 8;
+        return this;
+    }
+
+    method void dispose() {
+        do Memory.deAlloc(this);
+        return;
+    }
+
+    method void setPosition(int ax, int ay) {
+        let x = ax;
+        let y = ay;
+        return;
+    }
+
+    method int getX() { return x; }
+    method int getY() { return y; }
+
+    /** Draws the notebook in the current color. */
+    method void drawColor(boolean color) {
+        var int lineY;
+        var int bindW;
+        let bindW = 14;
+
+        do Screen.setColor(color);
+
+        // Binding strip (filled rectangle on left)
+        do Screen.drawRectangle(x, y, x + bindW, y + h);
+
+        // Outer border (4 lines)
+        do Screen.drawLine(x, y, x + w, y);
+        do Screen.drawLine(x + w, y, x + w, y + h);
+        do Screen.drawLine(x, y + h, x + w, y + h);
+        do Screen.drawLine(x, y, x, y + h);
+
+        // Page ruled lines
+        let lineY = y + 14;
+        while (lineY < (y + h - 5)) {
+            do Screen.drawLine(x + bindW + 4, lineY, x + w - 4, lineY);
+            let lineY = lineY + 10;
+        }
+
+        // Spiral binding dots on binding strip
+        if (color) {
+            do Screen.setColor(false);
+        } else {
+            do Screen.setColor(true);
+        }
+        let lineY = y + 10;
+        while (lineY < (y + h - 5)) {
+            do Screen.drawCircle(x + 7, lineY, 3);
+            let lineY = lineY + 15;
+        }
+
+        return;
+    }
+
+    method void draw() {
+        do drawColor(true);
+        return;
+    }
+
+    method void erase() {
+        do Screen.setColor(false);
+        do Screen.drawRectangle(x - 1, y - 1, x + w + 1, y + h + 1);
+        return;
+    }
+
+    method void moveLeft() {
+        if (x > step) {
+            do erase();
+            let x = x - step;
+            do draw();
+        }
+        return;
+    }
+
+    method void moveRight() {
+        if ((x + w + step) < 511) {
+            do erase();
+            let x = x + step;
+            do draw();
+        }
+        return;
+    }
+
+    method void moveUp() {
+        if (y > step) {
+            do erase();
+            let y = y - step;
+            do draw();
+        }
+        return;
+    }
+
+    method void moveDown() {
+        if ((y + h + step) < 255) {
+            do erase();
+            let y = y + step;
+            do draw();
+        }
+        return;
+    }
+
+    method void grow() {
+        if ((w < 140) & (h < 170)) {
+            do erase();
+            let w = w + 10;
+            let h = h + 12;
+            do draw();
+        }
+        return;
+    }
+
+    method void shrink() {
+        if ((w > 40) & (h > 50)) {
+            do erase();
+            let w = w - 10;
+            let h = h - 12;
+            do draw();
+        }
+        return;
+    }
+}

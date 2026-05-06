@@ -1,0 +1,130 @@
+// Eyes.jack
+// Represents a pair of Eyes shape (letter E in NEMERLE).
+// Supports drawing, erasing, moving (4 directions), grow, and shrink.
+
+class Eyes {
+    field int x;     // center x of left eye
+    field int y;     // center y of both eyes
+    field int r;     // radius of each eye
+    field int step;  // movement step in pixels
+
+    constructor Eyes new(int ax, int ay) {
+        let x = ax;
+        let y = ay;
+        let r = 22;
+        let step = 8;
+        return this;
+    }
+
+    method void dispose() {
+        do Memory.deAlloc(this);
+        return;
+    }
+
+    method void setPosition(int ax, int ay) {
+        let x = ax;
+        let y = ay;
+        return;
+    }
+
+    method int getX() { return x; }
+    method int getY() { return y; }
+
+    /** Draws both eyes. gap = space between eye centers. */
+    method void drawColor(boolean color) {
+        var int gap;
+        var int pr;   // pupil radius
+        let gap = r + r + 10;  // distance between centers
+        let pr = r / 3;
+
+        // White of eyes (outline only when color=true, erase when false)
+        do Screen.setColor(color);
+        do Screen.drawCircle(x, y, r);
+        do Screen.drawCircle(x + gap, y, r);
+
+        // Pupils (opposite color for visibility when drawing)
+        if (color) {
+            do Screen.setColor(false);
+        } else {
+            do Screen.setColor(true);
+        }
+        do Screen.drawCircle(x + 4, y + 4, pr);
+        do Screen.drawCircle(x + gap + 4, y + 4, pr);
+
+        // Eyebrows
+        do Screen.setColor(color);
+        do Screen.drawLine(x - r + 2, y - r - 4, x + r - 2, y - r - 8);
+        do Screen.drawLine(x + gap - r + 2, y - r - 8, x + gap + r - 2, y - r - 4);
+
+        return;
+    }
+
+    method void draw() {
+        do drawColor(true);
+        return;
+    }
+
+    method void erase() {
+        var int gap;
+        let gap = r + r + 10;
+        do Screen.setColor(false);
+        do Screen.drawRectangle(x - r - 2, y - r - 12, x + gap + r + 2, y + r + 2);
+        return;
+    }
+
+    method void moveLeft() {
+        if ((x - r - step) > 0) {
+            do erase();
+            let x = x - step;
+            do draw();
+        }
+        return;
+    }
+
+    method void moveRight() {
+        var int gap;
+        let gap = r + r + 10;
+        if ((x + gap + r + step) < 511) {
+            do erase();
+            let x = x + step;
+            do draw();
+        }
+        return;
+    }
+
+    method void moveUp() {
+        if ((y - r - 12 - step) > 0) {
+            do erase();
+            let y = y - step;
+            do draw();
+        }
+        return;
+    }
+
+    method void moveDown() {
+        if ((y + r + step) < 255) {
+            do erase();
+            let y = y + step;
+            do draw();
+        }
+        return;
+    }
+
+    method void grow() {
+        if (r < 35) {
+            do erase();
+            let r = r + 4;
+            do draw();
+        }
+        return;
+    }
+
+    method void shrink() {
+        if (r > 10) {
+            do erase();
+            let r = r - 4;
+            do draw();
+        }
+        return;
+    }
+}
