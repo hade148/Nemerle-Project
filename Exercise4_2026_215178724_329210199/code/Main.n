@@ -1,0 +1,510 @@
+// ============================================================
+//  Group: 41
+//  Submitted by:
+//    Name: Hadasa Esther Elbaz    ID: 215178724
+//    Name: Sara David             ID: 329210199
+//
+//  Exercise 4 – Jack Syntax Analyzer
+// ============================================================
+
+using System;
+using System.IO;
+using System.Console;
+using System.Collections.Generic;
+using System.Text;
+
+class Token
+{
+    public Value : string;
+    public Type  : string;   // "keyword"|"symbol"|"identifier"|"integerConstant"|"stringConstant"
+
+    public this(v : string, t : string) { Value = v; Type = t; }
+}
+
+// ── JackTokenizer ─────────────────────────────────────────────
+class JackTokenizer
+{
+    static Keywords : array[string] = array[
+        "class", "constructor", "function", "method", "field", "static",
+        "var", "int", "char", "boolean", "void", "true", "false", "null",
+        "this", "let", "do", "if", "else", "while", "return"
+    ];
+
+    mutable _tokens : List.[Token];
+    mutable _pos    : int;
+
+    public this(source : string)
+    {
+        _tokens = List.[Token]();
+        _pos    = -1;
+        Tokenize(source);
+    }
+
+    Tokenize(src : string) : void
+    {
+        mutable i = 0;
+        def n = src.Length;
+
+        while (i < n)
+        {
+            def c = src[i];
+
+            if (Char.IsWhiteSpace(c)) { i++; }
+
+            // Line comment  //
+            else if (i + 1 < n && c == '/' && src[i + 1] == '/')
+            {
+                while (i < n && src[i] != '\n') { i++; }
+            }
+
+            // Block comment  /* ... */
+            else if (i + 1 < n && c == '/' && src[i + 1] == '*')
+            {
+                i += 2;
+                while (i + 1 < n && !(src[i] == '*' && src[i + 1] == '/')) { i++; }
+                when (i + 1 < n) { i += 2; }
+            }
+
+            // String constant
+            else if (c == '"')
+            {
+                i++;
+                def sb = StringBuilder();
+                while (i < n && src[i] != '"') { _ = sb.Append(src[i]); i++; }
+                when (i < n) { i++; }
+                _tokens.Add(Token(sb.ToString(), "stringConstant"));
+            }
+
+            // Symbol
+            else if ("{}()[].,;+-*/&|<>=~".IndexOf(c) >= 0)
+            {
+                _tokens.Add(Token(c.ToString(), "symbol"));
+                i++;
+            }
+
+            // Integer constant
+            else if (Char.IsDigit(c))
+            {
+                def sb = StringBuilder();
+                while (i < n && Char.IsDigit(src[i])) { _ = sb.Append(src[i]); i++; }
+                _tokens.Add(Token(sb.ToString(), "integerConstant"));
+            }
+
+            // Keyword or identifier
+            else if (Char.IsLetter(c) || c == '_')
+            {
+                def sb = StringBuilder();
+                while (i < n && (Char.IsLetterOrDigit(src[i]) || src[i] == '_'))
+                {
+                    _ = sb.Append(src[i]); i++;
+                }
+                def word = sb.ToString();
+                def tt   = if (Array.IndexOf(Keywords, word) >= 0) "keyword" else "identifier";
+                _tokens.Add(Token(word, tt));
+            }
+
+            else { i++; }
+        }
+    }
+
+    public Count        : int  { get { _tokens.Count } }
+    public Advance()    : void { _pos++; }
+    public Current()    : Token { _tokens[_pos] }
+
+    // Peek at next token without consuming
+    public Peek()       : Token
+    {
+        if (_pos + 1 < _tokens.Count) _tokens[_pos + 1]
+        else Token("", "")
+    }
+
+    // Emit all tokens as XxxT.xml (tokenizer phase output)
+    public EmitTokenXml(writer : StreamWriter) : void
+    {
+        writer.WriteLine("<tokens>");
+        foreach (t in _tokens)
+        {
+            def esc = XmlEscape(t.Value);
+            writer.WriteLine($"<$(t.Type)> $esc </$(t.Type)>");
+        }
+        writer.WriteLine("</tokens>");
+    }
+
+    public static XmlEscape(s : string) : string
+    {
+        s.Replace("&", "&amp;")
+         .Replace("<", "&lt;")
+         .Replace(">", "&gt;")
+         .Replace("\"", "&quot;")
+    }
+}
+
+// ── CompilationEngine ──────────────────────────────────────────
+//
+//  Protocol: the tokenizer cursor always sits ON the last consumed token.
+//  "Peek()" looks at the NEXT token (not yet consumed).
+//  "Advance()" moves the cursor to the next token.
+//  "EatCurrent()" writes the token the cursor currently sits on.
+//  So the pattern for consuming a known token is:
+//      _tok.Advance();   // move onto it
+//      EatCurrent();     // write it
+//
+class CompilationEngine
+{
+    mutable _tok    : JackTokenizer;
+    mutable _writer : StreamWriter;
+    mutable _indent : int;
+
+    public this(tok : JackTokenizer, writer : StreamWriter)
+    {
+        _tok    = tok;
+        _writer = writer;
+        _indent = 0;
+    }
+
+    // ── XML helpers ───────────────────────────────────────────────
+    Pad()              : string { String(' ', _indent * 2) }
+    Open (tag : string): void { _writer.WriteLine(Pad() + "<"  + tag + ">"); _indent++; }
+    Close(tag : string): void { _indent--; _writer.WriteLine(Pad() + "</" + tag + ">"); }
+
+    // Write the token the cursor is currently on
+    EatCurrent() : void
+    {
+        def t   = _tok.Current();
+        def esc = JackTokenizer.XmlEscape(t.Value);
+        _writer.WriteLine(Pad() + "<" + t.Type + "> " + esc + " </" + t.Type + ">");
+    }
+
+    // Advance to next token, then write it
+    Eat() : void { _tok.Advance(); EatCurrent(); }
+
+    // ── Grammar ────────────────────────────────────────────────────
+
+    // class: 'class' className '{' classVarDec* subroutineDec* '}'
+    public CompileClass() : void
+    {
+        Open("class");
+        Eat();   // 'class'
+        Eat();   // className
+        Eat();   // '{'
+
+        // classVarDec*
+        while (_tok.Peek().Value == "static" || _tok.Peek().Value == "field")
+            CompileClassVarDec();
+
+        // subroutineDec*
+        while (_tok.Peek().Value == "constructor" ||
+               _tok.Peek().Value == "function"    ||
+               _tok.Peek().Value == "method")
+            CompileSubroutine();
+
+        Eat();   // '}'
+        Close("class");
+    }
+
+    // classVarDec: ('static'|'field') type varName (',' varName)* ';'
+    CompileClassVarDec() : void
+    {
+        Open("classVarDec");
+        Eat();   // 'static' | 'field'
+        Eat();   // type
+        Eat();   // varName
+        while (_tok.Peek().Value == ",") { Eat(); Eat(); }   // ',' varName
+        Eat();   // ';'
+        Close("classVarDec");
+    }
+
+    // subroutineDec: ('constructor'|'function'|'method') ('void'|type) subroutineName '(' parameterList ')' subroutineBody
+    CompileSubroutine() : void
+    {
+        Open("subroutineDec");
+        Eat();   // 'constructor' | 'function' | 'method'
+        Eat();   // 'void' | type
+        Eat();   // subroutineName
+        Eat();   // '('
+        CompileParameterList();
+        Eat();   // ')'
+        CompileSubroutineBody();
+        Close("subroutineDec");
+    }
+
+    // parameterList: ((type varName) (',' type varName)*)?
+    CompileParameterList() : void
+    {
+        Open("parameterList");
+        when (_tok.Peek().Value != ")")
+        {
+            Eat(); Eat();   // type varName
+            while (_tok.Peek().Value == ",") { Eat(); Eat(); Eat(); }  // ',' type varName
+        }
+        Close("parameterList");
+    }
+
+    // subroutineBody: '{' varDec* statements '}'
+    CompileSubroutineBody() : void
+    {
+        Open("subroutineBody");
+        Eat();   // '{'
+        while (_tok.Peek().Value == "var") CompileVarDec();
+        CompileStatements();
+        Eat();   // '}'
+        Close("subroutineBody");
+    }
+
+    // varDec: 'var' type varName (',' varName)* ';'
+    CompileVarDec() : void
+    {
+        Open("varDec");
+        Eat();   // 'var'
+        Eat();   // type
+        Eat();   // varName
+        while (_tok.Peek().Value == ",") { Eat(); Eat(); }   // ',' varName
+        Eat();   // ';'
+        Close("varDec");
+    }
+
+    // statements: statement*
+    CompileStatements() : void
+    {
+        Open("statements");
+        mutable go = true;
+        while (go)
+        {
+            def pv = _tok.Peek().Value;
+            if      (pv == "let")    { CompileLet();    }
+            else if (pv == "if")     { CompileIf();     }
+            else if (pv == "while")  { CompileWhile();  }
+            else if (pv == "do")     { CompileDo();     }
+            else if (pv == "return") { CompileReturn(); }
+            else                     { go = false; }
+        }
+        Close("statements");
+    }
+
+    // letStatement: 'let' varName ('[' expression ']')? '=' expression ';'
+    CompileLet() : void
+    {
+        Open("letStatement");
+        Eat();   // 'let'
+        Eat();   // varName
+        when (_tok.Peek().Value == "[")
+        {
+            Eat();   // '['
+            CompileExpression();
+            Eat();   // ']'
+        }
+        Eat();   // '='
+        CompileExpression();
+        Eat();   // ';'
+        Close("letStatement");
+    }
+
+    // ifStatement: 'if' '(' expression ')' '{' statements '}' ('else' '{' statements '}')?
+    CompileIf() : void
+    {
+        Open("ifStatement");
+        Eat();   // 'if'
+        Eat();   // '('
+        CompileExpression();
+        Eat();   // ')'
+        Eat();   // '{'
+        CompileStatements();
+        Eat();   // '}'
+        when (_tok.Peek().Value == "else")
+        {
+            Eat();   // 'else'
+            Eat();   // '{'
+            CompileStatements();
+            Eat();   // '}'
+        }
+        Close("ifStatement");
+    }
+
+    // whileStatement: 'while' '(' expression ')' '{' statements '}'
+    CompileWhile() : void
+    {
+        Open("whileStatement");
+        Eat();   // 'while'
+        Eat();   // '('
+        CompileExpression();
+        Eat();   // ')'
+        Eat();   // '{'
+        CompileStatements();
+        Eat();   // '}'
+        Close("whileStatement");
+    }
+
+    // doStatement: 'do' subroutineCall ';'
+    CompileDo() : void
+    {
+        Open("doStatement");
+        Eat();   // 'do'
+        Eat();   // firstName (className | varName | subroutineName)
+        when (_tok.Peek().Value == ".") { Eat(); Eat(); }   // '.' subroutineName
+        Eat();   // '('
+        CompileExpressionList();
+        Eat();   // ')'
+        Eat();   // ';'
+        Close("doStatement");
+    }
+
+    // returnStatement: 'return' expression? ';'
+    CompileReturn() : void
+    {
+        Open("returnStatement");
+        Eat();   // 'return'
+        when (_tok.Peek().Value != ";") { CompileExpression(); }
+        Eat();   // ';'
+        Close("returnStatement");
+    }
+
+    // expression: term (op term)*
+    CompileExpression() : void
+    {
+        Open("expression");
+        CompileTerm();
+        while (IsOp(_tok.Peek().Value)) { Eat(); CompileTerm(); }   // op term
+        Close("expression");
+    }
+
+    IsOp(v : string) : bool
+    {
+        v == "+" || v == "-" || v == "*" || v == "/" ||
+        v == "&" || v == "|" || v == "<" || v == ">" || v == "="
+    }
+
+    // term: integerConstant | stringConstant | keywordConstant |
+    //       varName | varName'['expression']' | subroutineCall |
+    //       '(' expression ')' | unaryOp term
+    CompileTerm() : void
+    {
+        Open("term");
+        def p = _tok.Peek();
+
+        if (p.Type == "integerConstant" || p.Type == "stringConstant")
+        {
+            Eat();   // the constant
+        }
+        else if (p.Value == "true" || p.Value == "false" || p.Value == "null" || p.Value == "this")
+        {
+            Eat();   // keywordConstant
+        }
+        else if (p.Value == "(")
+        {
+            Eat();   // '('
+            CompileExpression();
+            Eat();   // ')'
+        }
+        else if (p.Value == "-" || p.Value == "~")
+        {
+            Eat();          // unaryOp
+            CompileTerm();
+        }
+        else if (p.Type == "identifier")
+        {
+            Eat();   // varName | className | subroutineName
+            def nxt = _tok.Peek().Value;
+            if (nxt == "[")
+            {
+                Eat();   // '['
+                CompileExpression();
+                Eat();   // ']'
+            }
+            else if (nxt == "(")
+            {
+                Eat();   // '('
+                CompileExpressionList();
+                Eat();   // ')'
+            }
+            else if (nxt == ".")
+            {
+                Eat();   // '.'
+                Eat();   // subroutineName
+                Eat();   // '('
+                CompileExpressionList();
+                Eat();   // ')'
+            }
+            else { () }
+        }
+        else { () }
+
+        Close("term");
+    }
+
+    // expressionList: (expression (',' expression)*)?
+    CompileExpressionList() : void
+    {
+        Open("expressionList");
+        when (_tok.Peek().Value != ")")
+        {
+            CompileExpression();
+            while (_tok.Peek().Value == ",") { Eat(); CompileExpression(); }   // ',' expression
+        }
+        Close("expressionList");
+    }
+}
+
+// ── Main analyzer module ───────────────────────────────────────
+module JackAnalyzer
+{
+    ReadSource(path : string) : string
+    {
+        using (def r = StreamReader(path)) { r.ReadToEnd() }
+    }
+
+    ProcessFile(jackPath : string) : void
+    {
+        def src      = ReadSource(jackPath);
+        def dir      = Path.GetDirectoryName(jackPath);
+        def baseName = Path.GetFileNameWithoutExtension(jackPath);
+
+        // ── Phase 1: XxxT.xml  (tokenizer output) ────────────────
+        def tokPath = Path.Combine(dir, baseName + "T.xml");
+        using (def w = StreamWriter(tokPath, false))
+        {
+            def tok = JackTokenizer(src);
+            tok.EmitTokenXml(w);
+        }
+        WriteLine($"  [T] $tokPath");
+
+        // ── Phase 2: Xxx.xml  (parser output) ────────────────────
+        def xmlPath = Path.Combine(dir, baseName + ".xml");
+        using (def w = StreamWriter(xmlPath, false))
+        {
+            def tok    = JackTokenizer(src);
+            def engine = CompilationEngine(tok, w);
+            engine.CompileClass();
+        }
+        WriteLine($"  [P] $xmlPath");
+    }
+
+    Main() : void
+    {
+        Write("Enter path to .jack file or directory: ");
+        def targetPath = ReadLine().Trim().Trim('"');
+
+        if (Directory.Exists(targetPath))
+        {
+            def files = Directory.GetFiles(targetPath, "*.jack");
+            if (files.Length == 0)
+                WriteLine("No .jack files found.")
+            else
+            {
+                WriteLine($"Processing $(files.Length) file(s) in: $targetPath");
+                foreach (f in files) { WriteLine($"  $(Path.GetFileName(f))"); ProcessFile(f); }
+                WriteLine("Done.");
+            }
+        }
+        else if (File.Exists(targetPath) && targetPath.EndsWith(".jack", StringComparison.OrdinalIgnoreCase))
+        {
+            WriteLine($"Processing: $(Path.GetFileName(targetPath))");
+            ProcessFile(targetPath);
+            WriteLine("Done.");
+        }
+        else
+            WriteLine($"Error: '$targetPath' is not a .jack file or directory.");
+
+        WriteLine("Press Enter to exit...");
+        _ = ReadLine();
+    }
+}
