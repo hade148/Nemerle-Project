@@ -1,0 +1,849 @@
+// ============================================================
+//  Group: 41
+//  Submitted by:
+//    Name: Hadasa Esther Elbaz    ID: 215178724
+//    Name: Sara David             ID: 329210199
+//
+//  Exercise 5 – Jack Compiler (Project 11)
+// ============================================================
+
+using System;
+using System.IO;
+using System.Console;
+using System.Collections.Generic;
+using System.Text;
+
+class Token
+{
+    public Value : string;
+    public Type  : string;   // "keyword"|"symbol"|"identifier"|"integerConstant"|"stringConstant"
+
+    public this(v : string, t : string) { Value = v; Type = t; }
+}
+
+// ── JackTokenizer ─────────────────────────────────────────────
+class JackTokenizer
+{
+    static Keywords : array[string] = array[
+        "class", "constructor", "function", "method", "field", "static",
+        "var", "int", "char", "boolean", "void", "true", "false", "null",
+        "this", "let", "do", "if", "else", "while", "return"
+    ];
+
+    mutable _tokens : List.[Token];
+    mutable _pos    : int;
+
+    public this(source : string)
+    {
+        _tokens = List.[Token]();
+        _pos    = -1;
+        Tokenize(source);
+    }
+
+    Tokenize(src : string) : void
+    {
+        mutable i = 0;
+        def n = src.Length;
+
+        while (i < n)
+        {
+            def c = src[i];
+
+            if (Char.IsWhiteSpace(c)) { i++; }
+
+            // Line comment  //
+            else if (i + 1 < n && c == '/' && src[i + 1] == '/')
+            {
+                while (i < n && src[i] != '\n') { i++; }
+            }
+
+            // Block comment  /* ... */
+            else if (i + 1 < n && c == '/' && src[i + 1] == '*')
+            {
+                i += 2;
+                while (i + 1 < n && !(src[i] == '*' && src[i + 1] == '/')) { i++; }
+                when (i + 1 < n) { i += 2; }
+            }
+
+            // String constant
+            else if (c == '"')
+            {
+                i++;
+                def sb = StringBuilder();
+                while (i < n && src[i] != '"') { _ = sb.Append(src[i]); i++; }
+                when (i < n) { i++; }
+                _tokens.Add(Token(sb.ToString(), "stringConstant"));
+            }
+
+            // Symbol
+            else if ("{}()[].,;+-*/&|<>=~".IndexOf(c) >= 0)
+            {
+                _tokens.Add(Token(c.ToString(), "symbol"));
+                i++;
+            }
+
+            // Integer constant
+            else if (Char.IsDigit(c))
+            {
+                def sb = StringBuilder();
+                while (i < n && Char.IsDigit(src[i])) { _ = sb.Append(src[i]); i++; }
+                _tokens.Add(Token(sb.ToString(), "integerConstant"));
+            }
+
+            // Keyword or identifier
+            else if (Char.IsLetter(c) || c == '_')
+            {
+                def sb = StringBuilder();
+                while (i < n && (Char.IsLetterOrDigit(src[i]) || src[i] == '_'))
+                {
+                    _ = sb.Append(src[i]); i++;
+                }
+                def word = sb.ToString();
+                def tt   = if (Array.IndexOf(Keywords, word) >= 0) "keyword" else "identifier";
+                _tokens.Add(Token(word, tt));
+            }
+
+            else { i++; }
+        }
+    }
+
+    public Count        : int  { get { _tokens.Count } }
+    public Advance()    : void { _pos++; }
+    public Current()    : Token { _tokens[_pos] }
+
+    // Peek at next token without consuming
+    public Peek()       : Token
+    {
+        if (_pos + 1 < _tokens.Count) _tokens[_pos + 1]
+        else Token("", "")
+    }
+}
+
+// ── Symbol Table ───────────────────────────────────────────────
+class Symbol
+{
+    public Name  : string;
+    public Type  : string;
+    public Kind  : string; // "STATIC" | "FIELD" | "ARG" | "VAR"
+    public Index : int;
+
+    public this(name : string, type : string, kind : string, index : int)
+    {
+        Name = name; Type = type; Kind = kind; Index = index;
+    }
+}
+
+class SymbolTable
+{
+    _classSymbols      : Dictionary[string, Symbol] = Dictionary();
+    _subroutineSymbols : Dictionary[string, Symbol] = Dictionary();
+    mutable _counts    : Dictionary[string, int] = Dictionary();
+
+    public this()
+    {
+        _counts["STATIC"] = 0;
+        _counts["FIELD"]  = 0;
+        _counts["ARG"]    = 0;
+        _counts["VAR"]    = 0;
+    }
+
+    public StartSubroutine() : void
+    {
+        _subroutineSymbols.Clear();
+        _counts["ARG"] = 0;
+        _counts["VAR"] = 0;
+    }
+
+    public Define(name : string, type : string, kind : string) : void
+    {
+        def k = kind.ToUpper();
+        def idx = _counts[k];
+        _counts[k] = idx + 1;
+
+        def sym = Symbol(name, type, k, idx);
+        if (k == "STATIC" || k == "FIELD")
+            _classSymbols[name] = sym
+        else
+            _subroutineSymbols[name] = sym;
+    }
+
+    public VarCount(kind : string) : int
+    {
+        def k = kind.ToUpper();
+        if (_counts.ContainsKey(k)) _counts[k] else 0
+    }
+
+    public GetSymbol(name : string) : Symbol
+    {
+        if (_subroutineSymbols.ContainsKey(name))
+            _subroutineSymbols[name]
+        else if (_classSymbols.ContainsKey(name))
+            _classSymbols[name]
+        else
+            null
+    }
+
+    public KindOf(name : string) : string
+    {
+        def sym = GetSymbol(name);
+        if (sym != null) sym.Kind else "NONE"
+    }
+
+    public TypeOf(name : string) : string
+    {
+        def sym = GetSymbol(name);
+        if (sym != null) sym.Type else ""
+    }
+
+    public IndexOf(name : string) : int
+    {
+        def sym = GetSymbol(name);
+        if (sym != null) sym.Index else -1
+    }
+}
+
+// ── VM Writer ──────────────────────────────────────────────────
+class VMWriter
+{
+    mutable _writer : StreamWriter;
+
+    public this(writer : StreamWriter)
+    {
+        _writer = writer;
+    }
+
+    public WritePush(segment : string, index : int) : void
+    {
+        def seg = segment.ToLower();
+        _writer.WriteLine($"push $seg $index");
+    }
+
+    public WritePop(segment : string, index : int) : void
+    {
+        def seg = segment.ToLower();
+        _writer.WriteLine($"pop $seg $index");
+    }
+
+    public WriteArithmetic(command : string) : void
+    {
+        def cmd = command.ToLower();
+        _writer.WriteLine(cmd);
+    }
+
+    public WriteLabel(label : string) : void
+    {
+        _writer.WriteLine($"label $label");
+    }
+
+    public WriteGoto(label : string) : void
+    {
+        _writer.WriteLine($"goto $label");
+    }
+
+    public WriteIf(label : string) : void
+    {
+        _writer.WriteLine($"if-goto $label");
+    }
+
+    public WriteCall(name : string, nArgs : int) : void
+    {
+        _writer.WriteLine($"call $name $nArgs");
+    }
+
+    public WriteFunction(name : string, nLocals : int) : void
+    {
+        _writer.WriteLine($"function $name $nLocals");
+    }
+
+    public WriteReturn() : void
+    {
+        _writer.WriteLine("return");
+    }
+}
+
+// ── Compilation Engine ─────────────────────────────────────────
+class CompilationEngine
+{
+    mutable _tok         : JackTokenizer;
+    mutable _vmWriter    : VMWriter;
+    mutable _symbolTable : SymbolTable;
+    mutable _className   : string;
+    mutable _labelCount  : int;
+
+    public this(tok : JackTokenizer, vmWriter : VMWriter)
+    {
+        _tok         = tok;
+        _vmWriter    = vmWriter;
+        _symbolTable = SymbolTable();
+        _className   = "";
+        _labelCount  = 0;
+    }
+
+    GetUniqueLabel(prefix : string) : string
+    {
+        def lbl = $"$(prefix)_$(_labelCount)";
+        _labelCount++;
+        lbl
+    }
+
+    MapSegment(kind : string) : string
+    {
+        match (kind)
+        {
+            | "STATIC" => "static"
+            | "FIELD"  => "this"
+            | "ARG"    => "argument"
+            | "VAR"    => "local"
+            | _        => ""
+        }
+    }
+
+    IsOp(v : string) : bool
+    {
+        v == "+" || v == "-" || v == "*" || v == "/" ||
+        v == "&" || v == "|" || v == "<" || v == ">" || v == "="
+    }
+
+    // class: 'class' className '{' classVarDec* subroutineDec* '}'
+    public CompileClass() : void
+    {
+        _tok.Advance();   // 'class'
+        _tok.Advance();   // className
+        _className = _tok.Current().Value;
+        _tok.Advance();   // '{'
+
+        // classVarDec*
+        while (_tok.Peek().Value == "static" || _tok.Peek().Value == "field")
+            CompileClassVarDec();
+
+        // subroutineDec*
+        while (_tok.Peek().Value == "constructor" ||
+               _tok.Peek().Value == "function"    ||
+               _tok.Peek().Value == "method")
+            CompileSubroutine();
+
+        _tok.Advance();   // '}'
+    }
+
+    // classVarDec: ('static'|'field') type varName (',' varName)* ';'
+    CompileClassVarDec() : void
+    {
+        _tok.Advance();   // 'static' | 'field'
+        def kind = _tok.Current().Value;
+        _tok.Advance();   // type
+        def type = _tok.Current().Value;
+        _tok.Advance();   // varName
+        def name = _tok.Current().Value;
+        _symbolTable.Define(name, type, kind);
+
+        while (_tok.Peek().Value == ",")
+        {
+            _tok.Advance(); // ','
+            _tok.Advance(); // varName
+            def nextName = _tok.Current().Value;
+            _symbolTable.Define(nextName, type, kind);
+        }
+        _tok.Advance();   // ';'
+    }
+
+    // subroutineDec: ('constructor'|'function'|'method') ('void'|type) subroutineName '(' parameterList ')' subroutineBody
+    CompileSubroutine() : void
+    {
+        _symbolTable.StartSubroutine();
+
+        _tok.Advance();   // 'constructor' | 'function' | 'method'
+        def subKind = _tok.Current().Value;
+        _tok.Advance();   // 'void' | type
+        _ = _tok.Current().Value;
+        _tok.Advance();   // subroutineName
+        def subName = _tok.Current().Value;
+
+        // If it is a method, argument 0 is 'this' (pointer to current object)
+        if (subKind == "method")
+        {
+            _symbolTable.Define("this", _className, "ARG");
+        }
+        else { () }
+
+        _tok.Advance();   // '('
+        CompileParameterList();
+        _tok.Advance();   // ')'
+
+        CompileSubroutineBody(subName, subKind);
+    }
+
+    // parameterList: ((type varName) (',' type varName)*)?
+    CompileParameterList() : void
+    {
+        when (_tok.Peek().Value != ")")
+        {
+            _tok.Advance(); // type
+            def type = _tok.Current().Value;
+            _tok.Advance(); // varName
+            def name = _tok.Current().Value;
+            _symbolTable.Define(name, type, "ARG");
+
+            while (_tok.Peek().Value == ",")
+            {
+                _tok.Advance(); // ','
+                _tok.Advance(); // type
+                def nextType = _tok.Current().Value;
+                _tok.Advance(); // varName
+                def nextName = _tok.Current().Value;
+                _symbolTable.Define(nextName, nextType, "ARG");
+            }
+        }
+    }
+
+    // subroutineBody: '{' varDec* statements '}'
+    CompileSubroutineBody(subName : string, subKind : string) : void
+    {
+        _tok.Advance();   // '{'
+        while (_tok.Peek().Value == "var") CompileVarDec();
+
+        // Write the function declaration
+        def nLocals = _symbolTable.VarCount("VAR");
+        def funcName = $"$(_className).$(subName)";
+        _vmWriter.WriteFunction(funcName, nLocals);
+
+        // Perform memory allocation or set pointer 0 if constructor/method
+        if (subKind == "constructor")
+        {
+            def nFields = _symbolTable.VarCount("FIELD");
+            _vmWriter.WritePush("constant", nFields);
+            _vmWriter.WriteCall("Memory.alloc", 1);
+            _vmWriter.WritePop("pointer", 0);
+        }
+        else if (subKind == "method")
+        {
+            _vmWriter.WritePush("argument", 0);
+            _vmWriter.WritePop("pointer", 0);
+        }
+        else { () }
+
+        CompileStatements();
+        _tok.Advance();   // '}'
+    }
+
+    // varDec: 'var' type varName (',' varName)* ';'
+    CompileVarDec() : void
+    {
+        _tok.Advance();   // 'var'
+        _tok.Advance();   // type
+        def type = _tok.Current().Value;
+        _tok.Advance();   // varName
+        def name = _tok.Current().Value;
+        _symbolTable.Define(name, type, "VAR");
+
+        while (_tok.Peek().Value == ",")
+        {
+            _tok.Advance(); // ','
+            _tok.Advance(); // varName
+            def nextName = _tok.Current().Value;
+            _symbolTable.Define(nextName, type, "VAR");
+        }
+        _tok.Advance();   // ';'
+    }
+
+    // statements: statement*
+    CompileStatements() : void
+    {
+        mutable go = true;
+        while (go)
+        {
+            def pv = _tok.Peek().Value;
+            if      (pv == "let")    { CompileLet();    }
+            else if (pv == "if")     { CompileIf();     }
+            else if (pv == "while")  { CompileWhile();  }
+            else if (pv == "do")     { CompileDo();     }
+            else if (pv == "return") { CompileReturn(); }
+            else                     { go = false; }
+        }
+    }
+
+    // letStatement: 'let' varName ('[' expression ']')? '=' expression ';'
+    CompileLet() : void
+    {
+        _tok.Advance();   // 'let'
+        _tok.Advance();   // varName
+        def varName = _tok.Current().Value;
+
+        def kind = _symbolTable.KindOf(varName);
+        def idx = _symbolTable.IndexOf(varName);
+        def segment = MapSegment(kind);
+
+        mutable isArray = false;
+
+        if (_tok.Peek().Value == "[")
+        {
+            isArray = true;
+            _tok.Advance(); // '['
+            CompileExpression();
+            _tok.Advance(); // ']'
+
+            // Add array base address and offset
+            _vmWriter.WritePush(segment, idx);
+            _vmWriter.WriteArithmetic("add");
+        }
+        else { () }
+
+        _tok.Advance();   // '='
+        CompileExpression();
+        _tok.Advance();   // ';'
+
+        if (isArray)
+        {
+            // pop expression value to temp 1, set pointer 1 to target address, push temp 1, pop to THAT 0
+            _vmWriter.WritePop("temp", 1);
+            _vmWriter.WritePop("pointer", 1);
+            _vmWriter.WritePush("temp", 1);
+            _vmWriter.WritePop("that", 0);
+        }
+        else
+        {
+            _vmWriter.WritePop(segment, idx);
+        }
+    }
+
+    // ifStatement: 'if' '(' expression ')' '{' statements '}' ('else' '{' statements '}')?
+    CompileIf() : void
+    {
+        def labelFalse = GetUniqueLabel("IF_FALSE");
+        def labelEnd = GetUniqueLabel("IF_END");
+
+        _tok.Advance();   // 'if'
+        _tok.Advance();   // '('
+        CompileExpression();
+        _tok.Advance();   // ')'
+
+        _vmWriter.WriteArithmetic("not");
+        _vmWriter.WriteIf(labelFalse);
+
+        _tok.Advance();   // '{'
+        CompileStatements();
+        _tok.Advance();   // '}'
+
+        def hasElse = (_tok.Peek().Value == "else");
+        if (hasElse)
+        {
+            _vmWriter.WriteGoto(labelEnd);
+        }
+        else { () }
+
+        _vmWriter.WriteLabel(labelFalse);
+
+        if (hasElse)
+        {
+            _tok.Advance(); // 'else'
+            _tok.Advance(); // '{'
+            CompileStatements();
+            _tok.Advance(); // '}'
+            _vmWriter.WriteLabel(labelEnd);
+        }
+        else { () }
+    }
+
+    // whileStatement: 'while' '(' expression ')' '{' statements '}'
+    CompileWhile() : void
+    {
+        def labelExp = GetUniqueLabel("WHILE_EXP");
+        def labelEnd = GetUniqueLabel("WHILE_END");
+
+        _vmWriter.WriteLabel(labelExp);
+
+        _tok.Advance();   // 'while'
+        _tok.Advance();   // '('
+        CompileExpression();
+        _tok.Advance();   // ')'
+
+        _vmWriter.WriteArithmetic("not");
+        _vmWriter.WriteIf(labelEnd);
+
+        _tok.Advance();   // '{'
+        CompileStatements();
+        _tok.Advance();   // '}'
+
+        _vmWriter.WriteGoto(labelExp);
+        _vmWriter.WriteLabel(labelEnd);
+    }
+
+    // doStatement: 'do' subroutineCall ';'
+    CompileDo() : void
+    {
+        _tok.Advance();   // 'do'
+        _tok.Advance();   // first identifier of call
+        def firstName = _tok.Current().Value;
+        CompileSubroutineCall(firstName);
+        _tok.Advance();   // ';'
+
+        // Discard return value
+        _vmWriter.WritePop("temp", 0);
+    }
+
+    CompileSubroutineCall(firstName : string) : void
+    {
+        def nxt = _tok.Peek().Value;
+        if (nxt == ".")
+        {
+            _tok.Advance(); // '.'
+            _tok.Advance(); // subroutineName
+            def subName = _tok.Current().Value;
+
+            def kind = _symbolTable.KindOf(firstName);
+            if (kind != "NONE")
+            {
+                // Method call on an object
+                def idx = _symbolTable.IndexOf(firstName);
+                def segment = MapSegment(kind);
+                _vmWriter.WritePush(segment, idx);
+
+                def objType = _symbolTable.TypeOf(firstName);
+
+                _tok.Advance(); // '('
+                def nArgs = CompileExpressionList();
+                _tok.Advance(); // ')'
+
+                _vmWriter.WriteCall($"$objType.$subName", nArgs + 1);
+            }
+            else
+            {
+                // Static function call (or method on external class)
+                _tok.Advance(); // '('
+                def nArgs = CompileExpressionList();
+                _tok.Advance(); // ')'
+
+                _vmWriter.WriteCall($"$firstName.$subName", nArgs);
+            }
+        }
+        else
+        {
+            // Method call on self ('this')
+            _vmWriter.WritePush("pointer", 0);
+
+            _tok.Advance(); // '('
+            def nArgs = CompileExpressionList();
+            _tok.Advance(); // ')'
+
+            _vmWriter.WriteCall($"$(_className).$firstName", nArgs + 1);
+        }
+    }
+
+    // returnStatement: 'return' expression? ';'
+    CompileReturn() : void
+    {
+        _tok.Advance();   // 'return'
+        if (_tok.Peek().Value != ";")
+        {
+            CompileExpression();
+        }
+        else
+        {
+            // Void subroutines must return 0
+            _vmWriter.WritePush("constant", 0);
+        }
+        _tok.Advance();   // ';'
+        _vmWriter.WriteReturn();
+    }
+
+    // expression: term (op term)*
+    CompileExpression() : void
+    {
+        CompileTerm();
+        while (IsOp(_tok.Peek().Value))
+        {
+            _tok.Advance(); // operator
+            def op = _tok.Current().Value;
+            CompileTerm();
+
+            match (op)
+            {
+                | "+" => _vmWriter.WriteArithmetic("add")
+                | "-" => _vmWriter.WriteArithmetic("sub")
+                | "*" => _vmWriter.WriteCall("Math.multiply", 2)
+                | "/" => _vmWriter.WriteCall("Math.divide", 2)
+                | "&" => _vmWriter.WriteArithmetic("and")
+                | "|" => _vmWriter.WriteArithmetic("or")
+                | "<" => _vmWriter.WriteArithmetic("lt")
+                | ">" => _vmWriter.WriteArithmetic("gt")
+                | "=" => _vmWriter.WriteArithmetic("eq")
+                | _   => ()
+            }
+        }
+    }
+
+    // term: integerConstant | stringConstant | keywordConstant |
+    //       varName | varName'['expression']' | subroutineCall |
+    //       '(' expression ')' | unaryOp term
+    CompileTerm() : void
+    {
+        def p = _tok.Peek();
+
+        if (p.Type == "integerConstant")
+        {
+            _tok.Advance();
+            def val = int.Parse(_tok.Current().Value);
+            _vmWriter.WritePush("constant", val);
+        }
+        else if (p.Type == "stringConstant")
+        {
+            _tok.Advance();
+            def str = _tok.Current().Value;
+            _vmWriter.WritePush("constant", str.Length);
+            _vmWriter.WriteCall("String.new", 1);
+            foreach (c in str)
+            {
+                _vmWriter.WritePush("constant", c :> int);
+                _vmWriter.WriteCall("String.appendChar", 2);
+            }
+        }
+        else if (p.Value == "true")
+        {
+            _tok.Advance();
+            _vmWriter.WritePush("constant", 0);
+            _vmWriter.WriteArithmetic("not");
+        }
+        else if (p.Value == "false" || p.Value == "null")
+        {
+            _tok.Advance();
+            _vmWriter.WritePush("constant", 0);
+        }
+        else if (p.Value == "this")
+        {
+            _tok.Advance();
+            _vmWriter.WritePush("pointer", 0);
+        }
+        else if (p.Value == "(")
+        {
+            _tok.Advance(); // '('
+            CompileExpression();
+            _tok.Advance(); // ')'
+        }
+        else if (p.Value == "-" || p.Value == "~")
+        {
+            _tok.Advance(); // unaryOp
+            def op = _tok.Current().Value;
+            CompileTerm();
+            if (op == "-") _vmWriter.WriteArithmetic("neg")
+            else _vmWriter.WriteArithmetic("not");
+        }
+        else if (p.Type == "identifier")
+        {
+            _tok.Advance(); // varName | className | subroutineName
+            def name = _tok.Current().Value;
+            def nxt = _tok.Peek().Value;
+
+            if (nxt == "[") // array access
+            {
+                _tok.Advance(); // '['
+                CompileExpression();
+                _tok.Advance(); // ']'
+
+                def kind = _symbolTable.KindOf(name);
+                def idx = _symbolTable.IndexOf(name);
+                def segment = MapSegment(kind);
+
+                _vmWriter.WritePush(segment, idx);
+                _vmWriter.WriteArithmetic("add");
+                _vmWriter.WritePop("pointer", 1);
+                _vmWriter.WritePush("that", 0);
+            }
+            else if (nxt == "(" || nxt == ".")
+            {
+                CompileSubroutineCall(name);
+            }
+            else // simple variable
+            {
+                def kind = _symbolTable.KindOf(name);
+                def idx = _symbolTable.IndexOf(name);
+                def segment = MapSegment(kind);
+                _vmWriter.WritePush(segment, idx);
+            }
+        }
+        else { () }
+    }
+
+    // expressionList: (expression (',' expression)*)?
+    CompileExpressionList() : int
+    {
+        mutable nArgs = 0;
+        when (_tok.Peek().Value != ")")
+        {
+            CompileExpression();
+            nArgs++;
+            while (_tok.Peek().Value == ",")
+            {
+                _tok.Advance(); // ','
+                CompileExpression();
+                nArgs++;
+            }
+        }
+        nArgs
+    }
+}
+
+// ── Main compiler module ───────────────────────────────────────
+module JackCompiler
+{
+    ReadSource(path : string) : string
+    {
+        using (def r = StreamReader(path)) { r.ReadToEnd() }
+    }
+
+    ProcessFile(jackPath : string) : void
+    {
+        def src      = ReadSource(jackPath);
+        def dir      = Path.GetDirectoryName(jackPath);
+        def baseName = Path.GetFileNameWithoutExtension(jackPath);
+
+        def vmPath = Path.Combine(dir, baseName + ".vm");
+        using (def w = StreamWriter(vmPath, false))
+        {
+            def tok      = JackTokenizer(src);
+            def vmWriter = VMWriter(w);
+            def engine   = CompilationEngine(tok, vmWriter);
+            engine.CompileClass();
+        }
+        WriteLine($"  [VM] $vmPath");
+    }
+
+    Main(args : array[string]) : void
+    {
+        mutable targetPath = "";
+        if (args.Length > 0)
+        {
+            targetPath = args[0].Trim().Trim('"');
+        }
+        else
+        {
+            Write("Enter path to .jack file or directory: ");
+            targetPath = ReadLine().Trim().Trim('"');
+        }
+
+        if (Directory.Exists(targetPath))
+        {
+            def files = Directory.GetFiles(targetPath, "*.jack");
+            if (files.Length == 0)
+                WriteLine("No .jack files found.")
+            else
+            {
+                WriteLine($"Processing $(files.Length) file(s) in: $targetPath");
+                foreach (f in files) { WriteLine($"  $(Path.GetFileName(f))"); ProcessFile(f); }
+                WriteLine("Done.");
+            }
+        }
+        else if (File.Exists(targetPath) && targetPath.EndsWith(".jack", StringComparison.OrdinalIgnoreCase))
+        {
+            WriteLine($"Processing: $(Path.GetFileName(targetPath))");
+            ProcessFile(targetPath);
+            WriteLine("Done.");
+        }
+        else
+            WriteLine($"Error: '$targetPath' is not a .jack file or directory.");
+
+        when (args.Length == 0)
+        {
+            WriteLine("Press Enter to exit...");
+            _ = ReadLine();
+        }
+    }
+}
